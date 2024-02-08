@@ -4,7 +4,7 @@ const { createObjectCsvWriter } = require('csv-writer');
 const fs = require('fs');
 
 const app = express();
-const PORT = 3000;
+const PORT = 8000;
 
 app.use(express.json());
  
@@ -37,8 +37,9 @@ app.post('/scrape', async (req, res) => {
         await page.goto(firstUrl);
         const linkedinUrl = await page.$eval('a[href*="linkedin.com"]', anchor => anchor.href);
         const companyUrl = await page.url();
-      const pageContent = await page.content();
+        const pageContent = await page.content();
         const email = pageContent.match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g);
+
         companyData.push({
           companyName,
           companyUrl,
@@ -59,7 +60,7 @@ app.post('/scrape', async (req, res) => {
         { id: 'companyName', title: 'Company Name' },
         { id: 'companyUrl', title: 'Website Link' },
         { id: 'linkedinUrl', title: 'LinkedIn Page URL' },
-       { id:'email',title:'Email'}
+        { id:'email',title:'Email'}
       ]
     });
 
