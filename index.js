@@ -73,7 +73,7 @@ app.post('/scrape', async (req, res) => {
     fs.createReadStream('company_data.csv').pipe(res);
   } catch (error) {
     console.error('Error during scraping:', error);
-   return res.status(500).json({ success: false, error: `Error occurred for ${companyName}: ${error.message}` });
+   return res.status(500).json({ success: false, error: `Error occurred for }` });
   }
 });
 
