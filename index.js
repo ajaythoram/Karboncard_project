@@ -1,80 +1,62 @@
-const express = require('express');
 const puppeteer = require('puppeteer');
-const { createObjectCsvWriter } = require('csv-writer');
 const fs = require('fs');
 
-const app = express();
-const PORT = 8000;
+const EMAIL = 'thoramajaykumar7036@gmail.com'; 
+const PASSWORD = 'Ajay@9908'; 
+const companies = ['infosys', 'google', 'microsoft'];  // enter compamny name you want
 
-app.use(express.json());
- 
-// creating api request
-app.post('/scrape', async (req, res) => {
-  const { companyNames } = req.body;
+async function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
 
-  try {
-    // initilize web browser
-    const browser = await puppeteer.launch({ headless: true });
-    const companyData = [];
-
+async function loginAndScrape() {
+    const browser = await puppeteer.launch({ headless: false });
     const page = await browser.newPage();
-    for (let i = 0; i < companyNames.length; i++) {
-      const companyName = companyNames[i];
-      try {
-        await page.goto('https://www.google.com');
-        await page.type('*[name="q"]', companyName);
-        await Promise.all([
-          page.waitForNavigation({ waitUntil: 'networkidle0' }),
-          page.keyboard.press('Enter')
-        ]);
-        await page.waitForSelector('.g');
-        const firstUrl = await page.$eval('.g a', anchor => anchor.href);
-        if (!firstUrl) {
-          console.log(`No valid URL found for ${companyName}`);
-          continue;
-        }
-        // getting page data
-        await page.goto(firstUrl);
-        const linkedinUrl = await page.$eval('a[href*="linkedin.com"]', anchor => anchor.href);
-        const companyUrl = await page.url();
-        const pageContent = await page.content();
-        const email = pageContent.match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g);
 
-        companyData.push({
-          companyName,
-          companyUrl,
-          linkedinUrl,
-          email
+    await page.goto('https://www.linkedin.com/login');
+    await page.type('#username', EMAIL);
+    await page.type('#password', PASSWORD);
+    await page.click('.btn__primary--large');
+    await page.waitForSelector('.feed-identity-module__actor-meta', { timeout: 10 * 60 * 1000 });
+
+    let data = [];
+
+    for (let companyName of companies) {
+        const searchURL = `https://www.linkedin.com/search/results/companies/?keywords=${companyName}`;
+        await page.goto(searchURL);
+
+        const links = await page.evaluate(() => {
+            const elements = document.querySelectorAll('.app-aware-link.scale-down');
+            const links = Array.from(elements).map(element => element.href);
+            return links;
         });
-      } catch (error) {
-        console.error(`Error occurred for ${companyName}:`, error);
-      }
+
+        if (links.length > 0) {
+            const linkedinLink = links[0];
+            await page.goto(`${linkedinLink}/about`);
+
+            await page.waitForSelector('a.link-without-visited-state.ember-view');
+            const website = await page.evaluate(() => {
+                const elements = document.querySelectorAll('a.link-without-visited-state.ember-view');
+                const websites = Array.from(elements).map(element => element.href);
+                return websites[0];
+            });
+
+            data.push({ companyName, website, linkedinLink });
+        } else {
+            console.log(`Company not found: ${companyName}`);
+        }
+
+        await sleep(5000);
     }
 
     await browser.close();
-    
-    // creating CSV file 
-    const csvWriter = createObjectCsvWriter({
-      path: 'company_data.csv',
-      header: [
-        { id: 'companyName', title: 'Company Name' },
-        { id: 'companyUrl', title: 'Website Link' },
-        { id: 'linkedinUrl', title: 'LinkedIn Page URL' },
-        { id:'email',title:'Email'}
-      ]
-    });
 
-    await csvWriter.writeRecords(companyData);
+    const csvData = data.map(company => `${company.companyName},${company.website},${company.linkedinLink}`).join('\n');
+    fs.writeFileSync('companies.csv', `Company Name,Website,LinkedIn Page URL\n${csvData}`);
+}
 
-    console.log('CSV file generated successfully!');
-
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename=company_data.csv');
-    fs.createReadStream('company_data.csv').pipe(res);
-  } catch (error) {
-    console.error('Error during scraping:', error);
-   return res.status(500).json({ success: false, error: `Error occurred for }` });
-  }
+loginAndScrape().catch((e) => {
+    console.log(e);
+    console.log({ message: "Error Occurred", success: false });
 });
-
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
